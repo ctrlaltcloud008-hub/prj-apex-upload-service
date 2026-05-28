@@ -1,0 +1,8 @@
+APP_ENV: development
+PORT: ":8000"
+SERVICE: upload-api
+REGION: asia-south1
+PROJECT_ID: apex-494315
+SPANNER_DATABASE: projects/test-project/instances/test-instance/databases/test-database
+BUCKETS:
+  asia-south1: apex-494315-development-uploads-asia-south1

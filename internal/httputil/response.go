@@ -1,0 +1,18 @@
+package httputil
+
+import (
+	"encoding/json"
+	"net/http"
+
+	v1 "github.com/ctrlaltcloud008-hub/prj-apex-upload-service/api/v1"
+)
+
+func WriteJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(payload)
+}
+
+func WriteError(w http.ResponseWriter, errPayload *v1.ErrorResponse) {
+	WriteJSON(w, errPayload.HttpStatus, errPayload)
+}
