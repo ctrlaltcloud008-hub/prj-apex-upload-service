@@ -5,9 +5,10 @@ go 1.26.3
 require (
 	cloud.google.com/go/spanner v1.91.0
 	cloud.google.com/go/storage v1.56.0
-	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.1
+	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.5
 	github.com/google/uuid v1.6.0
 	github.com/spf13/viper v1.21.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	google.golang.org/api v0.280.0
@@ -53,7 +54,6 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect

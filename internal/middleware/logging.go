@@ -26,21 +26,21 @@ func RequestLogging(logger *logger.Logger) Middleware {
 			next.ServeHTTP(rw, r)
 
 			requestID, _ := RequestIDFromContext(r.Context())
-			userID, _ := UserIDFromContext(r.Context())
-			userTier, _ := UserTierFromContext(r.Context())
-			clientRegionHint, _ := ClientRegionHintFromContext(r.Context())
 			logger.Info(
 				r.Context(),
 				"http.request",
 				"Handled HTTP request",
 				slog.String("request_id", requestID),
-				slog.String("user_id", userID),
-				slog.String("user_tier", string(userTier)),
-				slog.String("client_region_hint", clientRegionHint),
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status_code", rw.statusCode),
-				slog.Duration("duration", time.Since(start)),
+				slog.Bool("audit", false),
+				slog.Group("httpRequest",
+					slog.String("requestMethod", r.Method),
+					slog.String("requestUrl", r.URL.String()),
+					slog.String("protocol", r.Proto),
+					slog.String("userAgent", r.UserAgent()),
+					slog.String("remoteIp", r.RemoteAddr),
+					slog.Int("status", rw.statusCode),
+					slog.Float64("latency", time.Since(start).Seconds()),
+				),
 			)
 		})
 	}

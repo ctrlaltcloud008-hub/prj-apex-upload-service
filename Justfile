@@ -5,7 +5,7 @@ network:
   docker network create spanner-net
 
 run:
-  docker run -d -v $HOME/.config/gcloud:/tmp/gcloud:ro -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcloud/application_default_credentials.json --name prj-apex-upload-service --network spanner-net -p 8000:8000 -e SPANNER_EMULATOR_HOST=spanner-emulator:9010 prj-apex-upload-service
+  docker run -d -v $HOME/.config/gcloud:/tmp/gcloud:ro -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcloud/application_default_credentials.json -e OTEL_RESOURCE_ATTRIBUTES="gcp.project_id=apex-494315" -e OTEL_EXPORTER_OTLP_ENDPOINT=https://telemetry.googleapis.com -e GOOGLE_CLOUD_QUOTA_PROJECT="apex-494315" --name prj-apex-upload-service --network spanner-net -p 8000:8000 -e SPANNER_EMULATOR_HOST=spanner-emulator:9010 -e APP_ENV=local prj-apex-upload-service
 
 spanner-up:
   docker run --name spanner-emulator --network spanner-net -p 9010:9010 -p 9020:9020 -d gcr.io/cloud-spanner-emulator/emulator
@@ -40,8 +40,8 @@ test:
   go test ./... -v
 
 upload:
-  curl -X POST http://localhost:8080/upload \
+  curl -X POST http://localhost:8000/upload \
     -H "Authorization: Bearer any-token" \
     -H "Content-Type: application/json" \
     -H "X-Client-Region: us-east1" \
-    -d '{"file_name":"my-video.mp4","content_type":"video/mp4","file_size_bytes":10485760}'
+    -d '{"file_name":"sample-video.mp4","content_type":"video/mp4","file_size_bytes":10485760}'
