@@ -83,7 +83,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 	logger := s.logger.WithSpanContext(ctx)
 	logger.Info(
 		ctx,
-		"upload.create_requested",
+		"upload.processing.started",
 		"Processing upload creation request",
 		slog.String("request_id", params.RequestID),
 		slog.String("user_id", params.UserID),
@@ -92,6 +92,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		slog.String("filename", req.Filename),
 		slog.String("content_type", req.ContentType),
 		slog.Int64("file_size_bytes", req.FileSizeBytes),
+		slog.Bool("audit", false),
 	)
 
 	limits, err := entity.GetTierLimits(params.UserTier)
@@ -101,12 +102,13 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		span.SetStatus(otelcodes.Error, "invalid user tier")
 		logger.Warn(
 			ctx,
-			"upload.invalid_user_tier",
+			"upload.validation.invalid_user_tier",
 			"Rejected upload request for invalid user tier",
 			slog.String("request_id", params.RequestID),
 			slog.String("user_id", params.UserID),
 			slog.String("user_tier", string(params.UserTier)),
 			slog.String("error", err.Error()),
+			slog.Bool("audit", false),
 		)
 		return nil, err
 	}
@@ -120,13 +122,14 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		span.SetStatus(otelcodes.Error, "file size exceeds limit")
 		logger.Warn(
 			ctx,
-			"upload.file_size_rejected",
+			"upload.validation.file_too_large",
 			"Rejected upload request that exceeds tier file size limit",
 			slog.String("request_id", params.RequestID),
 			slog.String("user_id", params.UserID),
 			slog.Int64("file_size_bytes", req.FileSizeBytes),
 			slog.Int64("max_file_size_bytes", limits.MaxFileSizeBytes),
 			slog.String("error", err.Error()),
+			slog.Bool("audit", false),
 		)
 		return nil, err
 	}
@@ -163,12 +166,13 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 			span.SetStatus(otelcodes.Error, "request id conflict")
 			logger.Warn(
 				ctx,
-				"upload.request_id_conflict",
+				"audit.upload.idempotency.conflict",
 				"Rejected upload request due to request ID conflict",
 				slog.String("request_id", params.RequestID),
 				slog.String("user_id", params.UserID),
 				slog.String("video_id", videoID),
 				slog.String("error", err.Error()),
+				slog.Bool("audit", true),
 			)
 			return nil, err
 		}
@@ -178,7 +182,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		span.SetStatus(otelcodes.Error, "failed to persist upload request")
 		logger.Warn(
 			ctx,
-			"upload.transaction_failed",
+			"upload.transaction.failed",
 			"Failed to persist upload request state",
 			slog.String("request_id", params.RequestID),
 			slog.String("user_id", params.UserID),
@@ -186,6 +190,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 			slog.String("bucket", bucket),
 			slog.String("object_path", objectPath),
 			slog.String("error", err.Error()),
+			slog.Bool("audit", false),
 		)
 		return nil, err
 	}
@@ -197,11 +202,12 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		span.SetStatus(otelcodes.Error, "missing stored video result")
 		logger.Error(
 			ctx,
-			"upload.transaction_missing_result",
+			"upload.transaction.missing_result",
 			"Upload transaction completed without stored video result",
 			slog.String("request_id", params.RequestID),
 			slog.String("user_id", params.UserID),
 			slog.String("video_id", videoID),
+			slog.Bool("audit", false),
 		)
 		return nil, missingResultErr
 	}
@@ -225,7 +231,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		span.SetStatus(otelcodes.Error, "failed to generate signed upload url")
 		logger.Error(
 			ctx,
-			"upload.signed_url_generation_failed",
+			"upload.storage.signed_url_failed",
 			"Failed to generate signed upload URL",
 			slog.String("request_id", params.RequestID),
 			slog.String("user_id", params.UserID),
@@ -235,13 +241,14 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 			slog.String("content_type", upload.MimeType.StringVal),
 			slog.Int64("file_size_bytes", upload.FileSize.Int64),
 			slog.String("error", err.Error()),
+			slog.Bool("audit", false),
 		)
 		return nil, fmt.Errorf("%w: %w", ErrSignedURLGeneration, err)
 	}
 
 	logger.Info(
 		ctx,
-		"upload.signed_url_generated",
+		"upload.storage.signed_url_generated",
 		"Generated signed upload URL",
 		slog.String("request_id", params.RequestID),
 		slog.String("user_id", params.UserID),
@@ -250,6 +257,7 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		slog.String("object_path", objectPath),
 		slog.Time("upload_url_expires_at", expiry),
 		slog.Int64("max_file_size_bytes", limits.MaxFileSizeBytes),
+		slog.Bool("audit", false),
 	)
 
 	return &domain.CreateUploadResult{
@@ -314,12 +322,13 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 		switch decision.Kind {
 		case idempotencyDecisionReplay:
 			logger.Info(ctx,
-				"upload.idempotency_hit",
+				"audit.upload.idempotency.replay",
 				"Reused existing upload for request ID",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.String("video_id", decision.Record.VideoID),
 				slog.String("status", string(*decision.Record.Status)),
+				slog.Bool("audit", true),
 			)
 			result = &Record{
 				VideoID:      decision.Record.VideoID,
@@ -332,21 +341,23 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 			return nil
 		case idempotencyDecisionMismatch:
 			logger.Warn(ctx,
-				"upload.idempotency_mismatch",
+				"audit.upload.idempotency.mismatch",
 				"Rejected upload request with mismatched payload",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.String("mismatched_fields", strings.Join(decision.mismatchedFields, ",")),
+				slog.Bool("audit", true),
 			)
 			return &IdempotencyMismatchError{RequestID: requestID, MismatchedFields: decision.mismatchedFields}
 		case idempotencyDecisionConsumed:
 			logger.Warn(ctx,
-				"upload.idempotency_consumed",
+				"audit.upload.idempotency.consumed",
 				"Rejected upload request with request ID that has already been consumed",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.String("video_id", decision.Record.VideoID),
 				slog.String("status", string(*decision.Record.Status)),
+				slog.Bool("audit", true),
 			)
 			return &RequestIDAlreadyConsumedError{RequestID: requestID, VideoID: decision.Record.VideoID, Status: string(*decision.Record.Status)}
 		}
@@ -359,12 +370,13 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 		if activeUploads >= limits.MaxConcurrentUploads {
 			logger.Warn(
 				ctx,
-				"upload.concurrent_limit_exceeded",
+				"upload.quota.concurrent_exceeded",
 				"Rejected upload due to concurrent upload limit",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.Int64("active_uploads", activeUploads),
 				slog.Int64("max_concurrent_uploads", limits.MaxConcurrentUploads),
+				slog.Bool("audit", false),
 			)
 			return fmt.Errorf("%w: user_id=%q max_concurrent_uploads=%d", ErrConcurrentUploadLimit, userID, limits.MaxConcurrentUploads)
 		}
@@ -377,12 +389,13 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 		if uploadsLastHour >= limits.MaxUploadsPerHour {
 			logger.Warn(
 				ctx,
-				"upload.hourly_limit_exceeded",
+				"upload.quota.hourly_exceeded",
 				"Rejected upload due to hourly upload limit",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.Int64("uploads_last_hour", uploadsLastHour),
 				slog.Int64("max_uploads_per_hour", limits.MaxUploadsPerHour),
+				slog.Bool("audit", false),
 			)
 			return fmt.Errorf("%w: user_id=%q max_uploads_per_hour=%d", ErrHourlyUploadLimit, userID, limits.MaxUploadsPerHour)
 		}
@@ -397,12 +410,13 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 		if totalStorageUsed > limits.StorageQuotaBytes {
 			logger.Warn(
 				ctx,
-				"upload.storage_quota_exceeded",
+				"upload.quota.storage_exceeded",
 				"Rejected upload due to storage quota limit",
 				slog.String("request_id", requestID),
 				slog.String("user_id", userID),
 				slog.Int64("total_storage_used_bytes", totalStorageUsed),
 				slog.Int64("storage_quota_bytes", limits.StorageQuotaBytes),
+				slog.Bool("audit", false),
 			)
 			return fmt.Errorf("%w: user_id=%q storage_quota_bytes=%d", ErrStorageQuotaExceeded, userID, limits.StorageQuotaBytes)
 		}
@@ -446,7 +460,7 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 
 		logger.Info(
 			ctx,
-			"upload.record_persisted",
+			"upload.storage.record_persisted",
 			"Persisted upload record and lifecycle state",
 			slog.String("request_id", requestID),
 			slog.String("user_id", userID),
@@ -454,6 +468,7 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 			slog.String("bucket", record.SourceBucket),
 			slog.String("object_path", record.SourceObject),
 			slog.Int64("gcs_generation", record.GCSGeneration),
+			slog.Bool("audit", false),
 		)
 
 		result = &Record{
