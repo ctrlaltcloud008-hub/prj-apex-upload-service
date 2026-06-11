@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/handler"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/middleware"
+	apexredis "github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/redis"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/service"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/spanner"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/storage"
@@ -124,7 +125,21 @@ func run() error {
 		slog.Bool("audit", false),
 	)
 
-	uploadService := service.NewUploadService(logger, cfg, spannerClient, gcsClient)
+	redisClient, err := apexredis.NewClient(ctx, cfg.RedisAddr(), cfg.RedisPassword())
+	if err != nil {
+		return err
+	}
+	defer redisClient.Close()
+	logger.Info(
+		ctx,
+		"service.lifecycle.redis_initialized",
+		"Redis client initialized",
+		slog.String("component", "bootstrap"),
+		slog.String("addr", cfg.RedisAddr()),
+		slog.Bool("audit", false),
+	)
+
+	uploadService := service.NewUploadService(logger, cfg, spannerClient, gcsClient, redisClient)
 	logger.Info(
 		ctx,
 		"service.lifecycle.initialized",

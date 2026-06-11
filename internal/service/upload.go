@@ -20,6 +20,7 @@ import (
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/domain"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/middleware"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/storage"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -50,17 +51,20 @@ type uploadService struct {
 	cfg     *config.UploadConfig
 	gcs     *storage.Client
 	spanner *spanner.Client
+	rdb     *redis.Client
 }
 
 func NewUploadService(logger *logger.Logger,
 	cfg *config.UploadConfig,
 	spanner *spanner.Client,
-	gcs *storage.Client) UploadService {
+	gcs *storage.Client,
+	rdb *redis.Client) UploadService {
 	return &uploadService{
 		logger:  logger,
 		cfg:     cfg,
 		spanner: spanner,
 		gcs:     gcs,
+		rdb:     rdb,
 	}
 }
 
@@ -157,8 +161,52 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 		FileSizeBytes: spanner.NullInt64{Int64: req.FileSizeBytes, Valid: req.FileSizeBytes > 0},
 	}
 
+	concurrentCount, err := quota.IncrConcurrentUploads(ctx, s.rdb, params.UserID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "redis quota check failed")
+		return nil, fmt.Errorf("%w: %w", ErrUploadServiceUnavailable, err)
+	}
+
+	hourlyCount, err := quota.IncrHourlyUploads(ctx, s.rdb, params.UserID)
+	if err != nil {
+		_ = quota.DecrConcurrentUploads(ctx, s.rdb, params.UserID)
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "redis quota check failed")
+		return nil, fmt.Errorf("%w: %w", ErrUploadServiceUnavailable, err)
+	}
+
+	if concurrentCount > limits.MaxConcurrentUploads {
+		_ = quota.DecrConcurrentUploads(ctx, s.rdb, params.UserID)
+		span.AddEvent("upload.quota.concurrent_exceeded")
+		span.SetStatus(otelcodes.Error, "concurrent upload limit reached")
+		logger.Warn(ctx, "upload.quota.concurrent_exceeded", "Rejected upload due to concurrent upload limit",
+			slog.String("request_id", params.RequestID),
+			slog.String("user_id", params.UserID),
+			slog.Int64("active_uploads", concurrentCount),
+			slog.Int64("max_concurrent_uploads", limits.MaxConcurrentUploads),
+			slog.Bool("audit", false),
+		)
+		return nil, fmt.Errorf("%w: user_id=%q max_concurrent_uploads=%d", ErrConcurrentUploadLimit, params.UserID, limits.MaxConcurrentUploads)
+	}
+
+	if hourlyCount > limits.MaxUploadsPerHour {
+		_ = quota.DecrConcurrentUploads(ctx, s.rdb, params.UserID)
+		span.AddEvent("upload.quota.hourly_exceeded")
+		span.SetStatus(otelcodes.Error, "hourly upload limit reached")
+		logger.Warn(ctx, "upload.quota.hourly_exceeded", "Rejected upload due to hourly upload limit",
+			slog.String("request_id", params.RequestID),
+			slog.String("user_id", params.UserID),
+			slog.Int64("uploads_last_hour", hourlyCount),
+			slog.Int64("max_uploads_per_hour", limits.MaxUploadsPerHour),
+			slog.Bool("audit", false),
+		)
+		return nil, fmt.Errorf("%w: user_id=%q max_uploads_per_hour=%d", ErrHourlyUploadLimit, params.UserID, limits.MaxUploadsPerHour)
+	}
+
 	upload, err := s.executeSpannerTransaction(ctx, params.UserID, params.RequestID, req, limits, videoRecord)
 	if err != nil {
+		_ = quota.DecrConcurrentUploads(ctx, s.rdb, params.UserID)
 
 		if errors.Is(err, ErrIdempotencyMismatch) || errors.Is(err, ErrRequestIDAlreadyConsumed) {
 			span.AddEvent("upload.idempotency.rejected")
@@ -193,6 +241,12 @@ func (s *uploadService) CreateUpload(ctx context.Context, params middleware.Para
 			slog.Bool("audit", false),
 		)
 		return nil, err
+	}
+
+	// Idempotency replay: the upload was already counted when first created,
+	// so roll back the increment we just added for this duplicate request.
+	if upload.VideoID != videoID {
+		_ = quota.DecrConcurrentUploads(ctx, s.rdb, params.UserID)
 	}
 
 	if upload == nil {
@@ -360,44 +414,6 @@ func (s *uploadService) executeSpannerTransaction(ctx context.Context, userID, r
 				slog.Bool("audit", true),
 			)
 			return &RequestIDAlreadyConsumedError{RequestID: requestID, VideoID: decision.Record.VideoID, Status: string(*decision.Record.Status)}
-		}
-
-		activeUploads, err := quota.CheckConcurrentLimit(ctx, txn, userID)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrUploadServiceUnavailable, err)
-		}
-
-		if activeUploads >= limits.MaxConcurrentUploads {
-			logger.Warn(
-				ctx,
-				"upload.quota.concurrent_exceeded",
-				"Rejected upload due to concurrent upload limit",
-				slog.String("request_id", requestID),
-				slog.String("user_id", userID),
-				slog.Int64("active_uploads", activeUploads),
-				slog.Int64("max_concurrent_uploads", limits.MaxConcurrentUploads),
-				slog.Bool("audit", false),
-			)
-			return fmt.Errorf("%w: user_id=%q max_concurrent_uploads=%d", ErrConcurrentUploadLimit, userID, limits.MaxConcurrentUploads)
-		}
-
-		uploadsLastHour, err := quota.CheckHourlyRateLimit(ctx, txn, userID)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrUploadServiceUnavailable, err)
-		}
-
-		if uploadsLastHour >= limits.MaxUploadsPerHour {
-			logger.Warn(
-				ctx,
-				"upload.quota.hourly_exceeded",
-				"Rejected upload due to hourly upload limit",
-				slog.String("request_id", requestID),
-				slog.String("user_id", userID),
-				slog.Int64("uploads_last_hour", uploadsLastHour),
-				slog.Int64("max_uploads_per_hour", limits.MaxUploadsPerHour),
-				slog.Bool("audit", false),
-			)
-			return fmt.Errorf("%w: user_id=%q max_uploads_per_hour=%d", ErrHourlyUploadLimit, userID, limits.MaxUploadsPerHour)
 		}
 
 		totalStorageUsed, err := quota.CheckStorageQuota(ctx, txn, userID)

@@ -5,8 +5,9 @@ go 1.26.3
 require (
 	cloud.google.com/go/spanner v1.91.0
 	cloud.google.com/go/storage v1.56.0
-	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.5
+	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.6
 	github.com/google/uuid v1.6.0
+	github.com/redis/go-redis/v9 v9.20.1
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
@@ -61,6 +62,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.54.0 // indirect

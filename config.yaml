@@ -5,4 +5,6 @@ REGION: asia-south1
 PROJECT_ID: apex-494315
 SPANNER_DATABASE: projects/test-project/instances/test-instance/databases/test-database
 BUCKETS:
-  asia-south1: apex-494315-development-uploads-asia-south1
+  asia-south1: prj-apex-upload-bucket
+REDIS_ADDR: localhost:6379
+REDIS_PASSWORD: ""
