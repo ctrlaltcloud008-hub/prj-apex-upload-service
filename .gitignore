@@ -36,3 +36,6 @@ go.work.sum
 /CLAUDE.md
 /AGENTS.md
 /docker-compose.yaml
+/terraform/environments/development/.terraform
+/terraform/environments/development/.terraform.lock.hcl
+/service-graph.yaml

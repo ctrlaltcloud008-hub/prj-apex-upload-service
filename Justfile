@@ -75,7 +75,6 @@ deploy: push
     --clear-secrets \
     --set-env-vars="^|^APP_ENV=development|SERVICE={{service}}|REGION={{region}}|PROJECT_ID={{project_id}}|SPANNER_DATABASE={{spanner_db}}|OTEL_RESOURCE_ATTRIBUTES=gcp.project_id={{project_id}}|OTEL_EXPORTER_OTLP_ENDPOINT=https://telemetry.googleapis.com|GOOGLE_CLOUD_QUOTA_PROJECT={{project_id}}|REDIS_ADDR=${redis_host}:6379|BUCKETS_JSON=${buckets_json}"
 
-# --- Database ---
 
 migrate-up:
   export SPANNER_EMULATOR_HOST=localhost:9010 && \
@@ -83,13 +82,6 @@ migrate-up:
   export SPANNER_INSTANCE_ID=test-instance && \
   export SPANNER_DATABASE_ID=test-database && \
   wrench migrate up --directory schema
-
-migrate-gcp:
-  wrench migrate up \
-    --project {{project_id}} \
-    --instance apex-spanner-instance \
-    --database apex-database \
-    --directory schema
 
 migrate-repair:
   wrench migrate repair \

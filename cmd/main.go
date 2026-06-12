@@ -15,13 +15,13 @@ import (
 	"github.com/ctrlaltcloud008-hub/prj-apex-core-modules/pkg/logger"
 	"github.com/ctrlaltcloud008-hub/prj-apex-core-modules/pkg/otel"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/config"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/handler"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/middleware"
 	apexredis "github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/redis"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/service"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/spanner"
 	"github.com/ctrlaltcloud008-hub/prj-apex-upload-service/internal/storage"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {

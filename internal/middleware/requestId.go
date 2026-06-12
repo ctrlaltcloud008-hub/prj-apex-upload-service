@@ -30,7 +30,6 @@ func RequestID(logger *logger.Logger) Middleware {
 					httputil.WriteError(w, v1.NewInvalidRequestIDError(requestID))
 					return
 				}
-				requestID = requestID
 			}
 
 			w.Header().Set("X-Request-ID", requestID)

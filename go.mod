@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	cloud.google.com/go/spanner v1.91.0
 	cloud.google.com/go/storage v1.56.0
-	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.6
+	github.com/ctrlaltcloud008-hub/prj-apex-core-modules v1.1.7
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.20.1
 	github.com/spf13/viper v1.21.0
