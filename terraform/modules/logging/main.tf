@@ -3,8 +3,8 @@ resource "google_bigquery_dataset" "audit_logs" {
   dataset_id = var.dataset_id
   location   = var.project_region
 
-  default_table_expiration_ms  = 365 * 24 * 60 * 60 * 1000
-  delete_contents_on_destroy   = true
+  default_table_expiration_ms = 365 * 24 * 60 * 60 * 1000
+  delete_contents_on_destroy  = true
 
   labels = {
     team        = "apex"
@@ -16,10 +16,15 @@ resource "google_bigquery_dataset" "audit_logs" {
 # View over the daily tables Cloud Logging auto-creates (run_googleapis_com_stdout_YYYYMMDD).
 # The wildcard covers all existing and future daily partitions.
 resource "google_bigquery_table" "audit_events" {
+  count               = var.create_audit_view ? 1 : 0
   project             = var.project_id
   dataset_id          = google_bigquery_dataset.audit_logs.dataset_id
   table_id            = var.table_id
   deletion_protection = false
+
+  # The view validates against run_googleapis_com_stdout_* at creation time, so
+  # the sink (and at least one routed log) must exist first.
+  depends_on = [google_logging_project_sink.audit_logs]
 
   view {
     use_legacy_sql = false

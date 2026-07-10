@@ -30,6 +30,8 @@ resource "google_storage_bucket" "uploads" {
     }
   }
 
+  force_destroy = true
+
 
   labels = {
     team        = "apex"

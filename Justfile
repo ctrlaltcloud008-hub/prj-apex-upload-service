@@ -114,7 +114,7 @@ test:
 
 upload:
   curl -X POST  https://upload-api-28030170607.asia-south1.run.app/upload \
-    -H "Authorization: Bearer admin" \
+    -H "Authorization: Bearer apex" \
     -H "Content-Type: application/json" \
     -H "X-Client-Region: asia-south1" \
     -d '{"file_name":"sample-video.mp4","content_type":"video/mp4","file_size_bytes":10485760}'

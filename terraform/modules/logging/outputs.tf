@@ -4,8 +4,8 @@ output "dataset_id" {
 }
 
 output "table_id" {
-  description = "BigQuery table ID for audit events"
-  value       = google_bigquery_table.audit_events.table_id
+  description = "BigQuery table ID for audit events (null until create_audit_view is enabled)"
+  value       = one(google_bigquery_table.audit_events[*].table_id)
 }
 
 output "sink_name" {

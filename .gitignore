@@ -39,3 +39,14 @@ go.work.sum
 /terraform/environments/development/.terraform
 /terraform/environments/development/.terraform.lock.hcl
 /service-graph.yaml
+CLAUDE.md
+.megamemory/
+.scratch/
+.agents/
+.codex/
+.claude/
+AGENTS.md
+WEEK-PLAN.md
+.python-version
+terraform.tfvars
+*.tfvars

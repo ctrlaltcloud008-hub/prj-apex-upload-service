@@ -34,3 +34,15 @@ variable "table_id" {
   description = "BigQuery table ID for the audit events sink"
   default     = "audit_events"
 }
+
+variable "create_audit_view" {
+  type        = bool
+  description = <<-EOD
+    Whether to create the audit_events view. The view reads from the
+    run_googleapis_com_stdout_* wildcard, which BigQuery validates at creation
+    time and which only matches once Cloud Logging has routed at least one log
+    into the dataset. Leave false on the first apply (dataset + sink only); set
+    true on a later apply after audit logs have started flowing.
+  EOD
+  default     = false
+}

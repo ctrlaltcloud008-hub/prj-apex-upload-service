@@ -1,0 +1,82 @@
+service:
+  name: prj-apex-upload-service
+  team: APEX
+  language: go
+  runtime: cloud-run
+  repo: github.com/ctrlaltcloud008-hub/prj-apex-upload-service
+  gcp_project: apex-494315
+  pipeline_stage: UPLOADING
+
+inbound:
+  api:
+    - path: /uploads
+      method: POST
+      auth: JWT (bearer)
+      note: Client requests an upload. Validates file size + content type, enforces quota, creates the video record and returns a signed GCS resumable upload URL.
+    - path: /healthz
+      method: GET
+      auth: none
+      note: Liveness/health check.
+  pubsub: []
+
+outbound:
+  api: []
+  pubsub: []
+
+infrastructure:
+  databases:
+    - type: spanner
+      instance: apex-spanner-instance
+      database: apex-database
+      schema_name: public
+      tables:
+        - name: videos
+          access: read-write
+          operations: [select, insert]
+          key_columns: [video_id]
+          description: Inserts the canonical video row at status=UPLOADING with owner, content type and storage target.
+        - name: video_stages
+          access: write
+          operations: [insert]
+          key_columns: [video_id, stage, attempt]
+          description: Opens the UPLOADING stage record.
+        - name: video_lifecycle_events
+          access: write
+          operations: [insert]
+          key_columns: [video_id, event_seq]
+          description: Appends the initial UPLOADING lifecycle event.
+  gcs:
+    - bucket: prj-apex-upload-bucket
+      access: write
+      path_pattern: "{userID}/{videoID}/{fileName}"
+      storage_class: standard
+      region_type: regional
+      purpose: Mints a signed resumable-upload URL so the client uploads video bytes directly to GCS.
+  cache:
+    - engine: memorystore
+      instance: apex-redis-development
+      purpose: Enforces per-user concurrent and hourly upload quotas (Redis counters) before issuing an upload URL.
+
+pipeline:
+  outbox:
+    enabled: false
+  idempotency:
+    mechanism: insert_or_update
+    description: A new video_id is minted per upload request; re-requests create distinct records so there is no cross-request duplicate state.
+  state_transitions:
+    - from_state: UPLOADING
+      to_state: EXPIRED
+
+observability:
+  logs:
+    provider: google-cloud-logging
+    structure: true
+    mandatory_fields: [service, region, app_env, event_type]
+  tracing:
+    provider: google-cloud-trace
+    propagation: w3c-transparent
+    via: http-header
+  alerts: []
+  slos: []
+
+depends_on: []
